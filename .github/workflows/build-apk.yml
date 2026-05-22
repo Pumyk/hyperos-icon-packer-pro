@@ -1,0 +1,77 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up JDK 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v2
+      with:
+        api-level: 33
+        ndk-version: 25.1.8937393
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer cython
+        pip install kivy pillow
+
+    - name: Build APK with Buildozer
+      run: |
+        cd kivy_app
+        buildozer android debug
+
+    - name: Upload APK artifact
+      if: success()
+      uses: actions/upload-artifact@v3
+      with:
+        name: hyperosiconpackerpro-debug
+        path: kivy_app/bin/*.apk
+        retention-days: 30
+
+    - name: Create Release
+      if: success() && startsWith(github.ref, 'refs/tags/')
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body: |
+          HyperOS Icon Packer Pro APK Build
+
+          Download the APK from the artifacts below.
+        draft: false
+        prerelease: false
+
+    - name: Upload to Release Assets
+      if: success() && startsWith(github.ref, 'refs/tags/')
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./kivy_app/bin/hyperosiconpackerpro-debug.apk
+        asset_name: hyperosiconpackerpro-${{ github.ref_name }}.apk
+        asset_content_type: application/vnd.android.package-archive
